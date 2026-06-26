@@ -1,0 +1,22 @@
+{
+  "ollama": {
+    "url": "http://localhost:11434",
+    "model": "llama3.1",
+    "temperature": 0.7,
+    "timeout": 300,
+    "embedModel": "nomic-embed-text"
+  },
+  "qdrant": {
+    "url": "http://localhost:6333",
+    "apiKey": null
+  },
+  "rag": {
+    "enabled": true,
+    "chunkSize": 500,
+    "chunkOverlap": 100,
+    "topK": 3
+  },
+  "gateway": {
+    "url": "http://localhost:8000"
+  }
+}

@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Config (本地覆蓋)
+# 注意：不要忽略 src/config/config.json，這是應該版本控制的配置模板
+# 只忽略本地開發用的環境特定配置
+
+# 資料庫和快取
+*.db
+*.sqlite
+*.sqlite3
+*.pdb
+
+# Qdrant 向量資料庫本地資料
+qdrant_storage/
+qdrant_snapshots/
+
+# Ollama 模型檔案（本地存儲）
+.ollama/
+ollama_models/
+
+# 日誌檔案
+*.log
+logs/
+
+# 臨時檔案
+*.tmp
+*.temp
+*.cache
+.cache/
+tmp/
+
+# OS 特定檔案
+.DS_Store
+Thumbs.db
+*.bak
+*.swp
+
+# 測試覆蓋報告
+.coverage
+htmlcov/
+.pytest_cache/
+
+# 本地開發檔案
+.local/
+local_*.py
