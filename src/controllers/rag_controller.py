@@ -20,11 +20,6 @@ class InitializeConversationRequest(BaseModel):
     fewshots: Optional[List[str]] = None
 
 
-class AddConversationSummaryRequest(BaseModel):
-    """添加對話摘要的請求"""
-    conversation_id: str
-    summary_text: str
-    summary_id: Optional[str] = None
 
 
 # ===== Endpoints =====
@@ -37,6 +32,7 @@ async def initialize_conversation(request: InitializeConversationRequest):
     當 chat-service 建立新聊天室時呼叫此端點
     """
     try:
+        print(f"📥 [rag_controller] 初始化請求: conversationId={request.conversation_id}")
         result = rag_service.initialize_conversation(
             conversation_id=request.conversation_id,
             character_id=request.character_id,
@@ -45,10 +41,15 @@ async def initialize_conversation(request: InitializeConversationRequest):
         )
 
         if result["status"] == "error":
+            print(f"❌ [rag_controller] rag_service 返回錯誤: {result['message']}")
             raise HTTPException(status_code=500, detail=result["message"])
 
+        print(f"✅ [rag_controller] 初始化成功")
         return result
     except Exception as e:
+        print(f"❌ [rag_controller] 異常: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -70,46 +71,19 @@ async def cleanup_conversation(conversation_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/conversations/{conversation_id}/summary")
-async def add_conversation_summary(
-    conversation_id: str,
-    request: AddConversationSummaryRequest
-):
-    """
-    添加對話摘要
-
-    定期添加對話摘要作為長期記憶
-    """
-    try:
-        result = rag_service.add_conversation_summary(
-            conversation_id=conversation_id,
-            summary_text=request.summary_text,
-            summary_id=request.summary_id
-        )
-
-        if result["status"] == "error":
-            raise HTTPException(status_code=500, detail=result["message"])
-
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.get("/conversations/{conversation_id}/context")
 async def get_rag_context(
     conversation_id: str,
-    character_id: str,
     user_message: str
 ):
     """
     為聊天室檢索 RAG 上下文
 
-    在生成回應前呼叫此端點取得相關背景、範例和摘要
+    在生成回應前呼叫此端點取得相關背景和範例
     """
     try:
         result = rag_service.get_rag_context(
             conversation_id=conversation_id,
-            character_id=character_id,
             user_message=user_message
         )
 

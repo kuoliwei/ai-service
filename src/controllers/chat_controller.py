@@ -41,6 +41,7 @@ async def generate_response(request: GenerateResponseRequest):
 
     接收聊天室資訊和對話歷史，返回 AI 生成的回應
     """
+    print(f"📥 [chat_controller] 收到請求: {request}")
     try:
         # 驗證輸入
         if not request.conversation_id:
@@ -80,4 +81,7 @@ async def generate_response(request: GenerateResponseRequest):
     except HTTPException:
         raise
     except Exception as e:
+        print(f"❌ [chat_controller] 異常: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

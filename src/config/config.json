@@ -1,4 +1,8 @@
 {
+  "server": {
+    "port": 6001,
+    "host": "0.0.0.0"
+  },
   "ollama": {
     "url": "http://localhost:11434",
     "model": "llama3.1",
@@ -12,9 +16,12 @@
   },
   "rag": {
     "enabled": true,
-    "chunkSize": 500,
+    "chunkSize": 200,
     "chunkOverlap": 100,
-    "topK": 3
+    "search": {
+      "backgroundLimit": 1,
+      "fewshotsLimit": 1
+    }
   },
   "gateway": {
     "url": "http://localhost:8000"

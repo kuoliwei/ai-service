@@ -7,7 +7,7 @@ import uuid
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from src.rag.vector_store import vector_store
 from src.rag.data_loader import data_loader
-from config import config
+from src.config.config_loader import config
 
 
 class RAGRepository:
@@ -16,8 +16,8 @@ class RAGRepository:
     def __init__(self):
         self.vector_store = vector_store
         self.data_loader = data_loader
-        self.max_chunk_size = config.RAG_CHUNK_SIZE
-        self.chunk_overlap = config.RAG_CHUNK_OVERLAP
+        self.max_chunk_size = config.get("rag.chunkSize", 500)
+        self.chunk_overlap = config.get("rag.chunkOverlap", 100)
 
     def _chunk_text(self, text: str) -> List[str]:
         """
@@ -103,7 +103,7 @@ class RAGRepository:
             documents.append(doc)
 
         return self.vector_store.upsert_documents(
-            config.CHARACTER_COLLECTION,
+            "characters",
             documents,
             metadata_fields=["conversation_id", "character_id", "type", "chunk_index"]
         )
@@ -145,42 +145,9 @@ class RAGRepository:
             return True
 
         return self.vector_store.upsert_documents(
-            config.FEWSHOTS_COLLECTION,
+            "fewshots",
             documents,
             metadata_fields=["conversation_id", "character_id", "type", "index"]
-        )
-
-    def add_conversation_summary(
-        self,
-        conversation_id: str,
-        summary_text: str,
-        summary_id: str = None
-    ) -> bool:
-        """
-        添加對話摘要到向量資料庫
-
-        參數：
-            conversation_id: 聊天室 ID
-            summary_text: 摘要內容
-            summary_id: 摘要 ID（可選）
-
-        返回：
-            是否成功
-        """
-        if not summary_id:
-            summary_id = str(uuid.uuid4())
-
-        document = {
-            "id": summary_id,
-            "text": summary_text,
-            "conversation_id": conversation_id,
-            "type": "summary"
-        }
-
-        return self.vector_store.upsert_documents(
-            config.CONVERSATION_COLLECTION,
-            [document],
-            metadata_fields=["conversation_id", "type"]
         )
 
     # ===== 資料搜尋 =====
@@ -188,8 +155,7 @@ class RAGRepository:
     def search_character_background(
         self,
         conversation_id: str,
-        query: str,
-        limit: int = None
+        query: str
     ) -> List[Dict]:
         """
         搜尋角色背景
@@ -197,15 +163,14 @@ class RAGRepository:
         參數：
             conversation_id: 聊天室 ID
             query: 搜尋文本
-            limit: 返回數量
 
         返回：
             搜尋結果
         """
-        limit = limit or config.RAG_TOP_K
+        limit = config.get("rag.search.backgroundLimit", 1)
 
         return self.vector_store.search(
-            collection_name=config.CHARACTER_COLLECTION,
+            collection_name="characters",
             query=query,
             limit=limit,
             filters={"conversation_id": conversation_id}
@@ -214,8 +179,7 @@ class RAGRepository:
     def search_fewshots(
         self,
         conversation_id: str,
-        query: str,
-        limit: int = None
+        query: str
     ) -> List[Dict]:
         """
         搜尋 Few-Shot 範例
@@ -223,41 +187,14 @@ class RAGRepository:
         參數：
             conversation_id: 聊天室 ID
             query: 搜尋文本
-            limit: 返回數量
 
         返回：
             搜尋結果
         """
-        limit = limit or config.RAG_TOP_K
+        limit = config.get("rag.search.fewshotsLimit", 3)
 
         return self.vector_store.search(
-            collection_name=config.FEWSHOTS_COLLECTION,
-            query=query,
-            limit=limit,
-            filters={"conversation_id": conversation_id}
-        )
-
-    def search_conversation_summaries(
-        self,
-        conversation_id: str,
-        query: str,
-        limit: int = None
-    ) -> List[Dict]:
-        """
-        搜尋對話摘要
-
-        參數：
-            conversation_id: 聊天室 ID
-            query: 搜尋文本
-            limit: 返回數量
-
-        返回：
-            搜尋結果
-        """
-        limit = limit or config.RAG_TOP_K
-
-        return self.vector_store.search(
-            collection_name=config.CONVERSATION_COLLECTION,
+            collection_name="fewshots",
             query=query,
             limit=limit,
             filters={"conversation_id": conversation_id}
@@ -288,19 +225,13 @@ class RAGRepository:
 
             # 刪除角色背景
             self.vector_store.client.delete(
-                collection_name=config.CHARACTER_COLLECTION,
+                collection_name="characters",
                 points_selector=filter_condition
             )
 
             # 刪除 few-shots
             self.vector_store.client.delete(
-                collection_name=config.FEWSHOTS_COLLECTION,
-                points_selector=filter_condition
-            )
-
-            # 刪除摘要
-            self.vector_store.client.delete(
-                collection_name=config.CONVERSATION_COLLECTION,
+                collection_name="fewshots",
                 points_selector=filter_condition
             )
 

@@ -8,7 +8,7 @@ class PromptBuilder:
     """System Prompt 組裝工具"""
 
     @staticmethod
-    def build_system_prompt(behavior_specs: dict, character_info: dict, conversation_history: list = None) -> str:
+    def build_system_prompt(behavior_specs: dict, character_info: dict, conversation_history: list = None, rag_context: dict = None) -> str:
         """
         組裝最終的 system prompt
 
@@ -20,6 +20,8 @@ class PromptBuilder:
                 {name: str, gender: str, tags: list}
             conversation_history: list，對話歷史（可選，用於上下文）
                 [{role: str, text: str}, ...]
+            rag_context: dict，RAG 檢索結果（可選）
+                {character_background: str, fewshots: list}
 
         返回：
             str，最終的 system prompt
@@ -91,7 +93,22 @@ class PromptBuilder:
 - **性別**: {char_gender}
 - **核心特徵**: [{tag_str}]"""
 
-        # 10. 組裝最終 system prompt
+        # 10. 構建 RAG 上下文部分
+        rag_context_str = ""
+        if rag_context:
+            rag_context_str = "\n## 角色背景與範例"
+
+            # 添加角色背景
+            if rag_context.get("character_background"):
+                rag_context_str += f"\n### 相關背景資訊\n{rag_context['character_background']}"
+
+            # 添加 few-shots
+            if rag_context.get("fewshots"):
+                rag_context_str += "\n### 對話範例"
+                for idx, fewshot in enumerate(rag_context["fewshots"], 1):
+                    rag_context_str += f"\n**範例 {idx}:**\n{fewshot}"
+
+        # 11. 組裝最終 system prompt
         prompt = f"""# 系統角色扮演指令
 
 ## 任務
@@ -99,14 +116,15 @@ class PromptBuilder:
 
 {boundary_warning}
 
-{principles_str}{conversation_policies_str}{generation_policies_str}{writing_style_str}{response_format_str}{character_info_str}
-
----
-
-*(系統說明：角色的詳細背景、對話範例和相關記憶將透過 RAG 動態注入。)*
+{principles_str}{conversation_policies_str}{generation_policies_str}{writing_style_str}{response_format_str}{character_info_str}{rag_context_str}
 """
 
-        return prompt.strip()
+        final_prompt = prompt.strip()
+        print(f"\n🔧 [prompt_builder] 最終 System Prompt:\n{'='*80}")
+        print(final_prompt)
+        print(f"{'='*80}\n")
+
+        return final_prompt
 
 
 # 全局實例

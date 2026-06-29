@@ -1,35 +1,31 @@
-import os
-from dotenv import load_dotenv
+from src.config.config_loader import config as config_loader
 
-load_dotenv()
-
+# 使用 config_loader 作為主要配置源
 class Config:
     # Server
-    PORT = int(os.getenv("PORT", 6001))
+    PORT = int(config_loader.get("server.port", 6001))
     HOST = "0.0.0.0"
 
     # Ollama Configuration
-    OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama2")
-    OLLAMA_TIMEOUT = 300
-    OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+    OLLAMA_URL = config_loader.get("ollama.url", "http://localhost:11434")
+    OLLAMA_MODEL = config_loader.get("ollama.model", "llama2")
+    OLLAMA_TIMEOUT = config_loader.get("ollama.timeout", 300)
+    OLLAMA_EMBED_MODEL = config_loader.get("ollama.embedModel", "nomic-embed-text")
 
     # API Gateway
-    GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:8000")
+    GATEWAY_URL = config_loader.get("gateway.url", "http://localhost:8000")
 
     # Qdrant Configuration
-    QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-    QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
+    QDRANT_URL = config_loader.get("qdrant.url", "http://localhost:6333")
+    QDRANT_API_KEY = config_loader.get("qdrant.apiKey", None)
 
     # RAG Configuration
-    RAG_ENABLED = os.getenv("RAG_ENABLED", "true").lower() == "true"
-    RAG_CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", 500))
-    RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", 100))
-    RAG_TOP_K = int(os.getenv("RAG_TOP_K", 3))
+    RAG_ENABLED = config_loader.get("rag.enabled", True)
+    RAG_CHUNK_SIZE = config_loader.get("rag.chunkSize", 500)
+    RAG_CHUNK_OVERLAP = config_loader.get("rag.chunkOverlap", 100)
 
     # Collections
     CHARACTER_COLLECTION = "characters"
     FEWSHOTS_COLLECTION = "fewshots"
-    CONVERSATION_COLLECTION = "conversation_summaries"
 
 config = Config()

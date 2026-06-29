@@ -2,6 +2,5 @@
 
 from .embedder import OllamaEmbedder
 from .vector_store import QdrantVectorStore
-from .retriever import RAGRetriever
 
-__all__ = ["OllamaEmbedder", "QdrantVectorStore", "RAGRetriever"]
+__all__ = ["OllamaEmbedder", "QdrantVectorStore"]

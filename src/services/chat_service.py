@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 from src.prompt.prompt_builder import prompt_builder
-from src.rag.retriever import rag_retriever
+from src.services.rag_service import rag_service
 from src.config.config_loader import config
 
 
@@ -63,15 +63,39 @@ class ChatService:
         try:
             print(f"\n🤖 [chat_service] 開始生成回應: conversationId={conversation_id}")
 
-            # 1. 組裝 system prompt
+            # 1. 檢索 RAG 上下文
+            rag_context = {}
+            if conversation_history:
+                # 取最後一條訊息作為查詢文本
+                last_message = conversation_history[-1].get("text", "")
+                print(f"📚 [chat_service] 檢索 RAG 上下文，查詢文本: {last_message[:50]}...")
+                rag_context = rag_service.get_rag_context(
+                    conversation_id=conversation_id,
+                    user_message=last_message
+                )
+
+                # 詳細 log RAG 檢索結果
+                print(f"✅ [chat_service] RAG 檢索完成")
+                if rag_context.get("character_background"):
+                    print(f"📖 [chat_service] 檢索到背景:\n{rag_context['character_background']}\n")
+                else:
+                    print(f"⚠️  [chat_service] 未檢索到背景")
+
+                fewshots = rag_context.get("fewshots", [])
+                print(f"💬 [chat_service] 檢索到 {len(fewshots)} 個 few-shot 範例")
+                for idx, fewshot in enumerate(fewshots, 1):
+                    print(f"  範例 {idx}:\n{fewshot}\n")
+
+            # 2. 組裝 system prompt
             print(f"📝 [chat_service] 組裝 system prompt...")
             system_prompt = prompt_builder.build_system_prompt(
                 behavior_specs=self.behavior_specs,
                 character_info=character_info,
-                conversation_history=conversation_history
+                conversation_history=conversation_history,
+                rag_context=rag_context
             )
 
-            # 2. 準備訊息清單（system prompt + 對話歷史）
+            # 3. 準備訊息清單（system prompt + 對話歷史）
             messages = [
                 {"role": "system", "content": system_prompt}
             ]
@@ -85,7 +109,7 @@ class ChatService:
 
             print(f"📊 [chat_service] 訊息清單: {len(messages)} 筆 (1 個 system + {len(conversation_history)} 個對話)")
 
-            # 3. 呼叫 Ollama 生成回應
+            # 4. 呼叫 Ollama 生成回應
             print(f"🧠 [chat_service] 呼叫 Ollama 引擎...")
             import ollama
 

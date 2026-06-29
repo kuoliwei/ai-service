@@ -25,7 +25,6 @@ async def startup_event():
         # nomic-embed-text 產生 768 維向量
         vector_store.create_collection(config.CHARACTER_COLLECTION, vector_size=768)
         vector_store.create_collection(config.FEWSHOTS_COLLECTION, vector_size=768)
-        vector_store.create_collection(config.CONVERSATION_COLLECTION, vector_size=768)
         print("✅ [app.py] RAG 集合初始化成功")
     except Exception as e:
         print(f"❌ [app.py] RAG 集合初始化失敗: {e}")
