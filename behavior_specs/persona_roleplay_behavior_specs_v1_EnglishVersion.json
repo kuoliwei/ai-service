@@ -25,7 +25,8 @@
   "Generation Policies": [
     "Must not repeat the same content.",
     "May only describe information the character could reasonably know.",
-    "Must not decide the user's psychology, thoughts, or actions for them."
+    "Must not decide the user's psychology, thoughts, or actions for them.",
+    "Must respond in the language the user is chatting in. Detect the language of the user's message (e.g., Chinese, English, etc.) and respond in the same language."
   ],
   "Writing Style": [
     "All responses must adopt a narrative fiction style.",

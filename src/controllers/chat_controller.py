@@ -32,6 +32,12 @@ class GenerateResponseRequest(BaseModel):
     conversation_history: List[MessageHistory]
 
 
+class GenerateSummaryRequest(BaseModel):
+    """生成摘要的請求"""
+    conversation_id: str
+    prompt: str
+
+
 # ===== Endpoints =====
 
 @router.post("/generate")
@@ -76,6 +82,45 @@ async def generate_response(request: GenerateResponseRequest):
         if result["status"] == "error":
             raise HTTPException(status_code=500, detail=result["message"])
 
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ [chat_controller] 異常: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/summary")
+async def generate_summary(request: GenerateSummaryRequest):
+    """
+    生成對話摘要
+
+    接收摘要提示詞，返回 LLM 生成的摘要
+    """
+    print(f"📥 [chat_controller] 生成摘要: conversationId={request.conversation_id}")
+    try:
+        # 驗證輸入
+        if not request.conversation_id:
+            raise HTTPException(status_code=400, detail="conversation_id 不能為空")
+
+        if not request.prompt:
+            raise HTTPException(status_code=400, detail="prompt 不能為空")
+
+        # 呼叫 service 生成摘要
+        result = chat_service.generate_summary(
+            conversation_id=request.conversation_id,
+            prompt=request.prompt
+        )
+
+        # 檢查結果
+        if result["status"] == "error":
+            print(f"❌ [chat_controller] chat_service 返回錯誤: {result['message']}")
+            raise HTTPException(status_code=500, detail=result["message"])
+
+        print(f"✅ [chat_controller] 摘要生成成功")
         return result
 
     except HTTPException:

@@ -1,0 +1,61 @@
+# 【RAG 初始化】
+# 發起聊天室的 RAG 資料初始化
+# 返回 202 Accepted + status: 'accepted'（非同步模式）
+POST http://localhost:6001/api/v1/rag/conversations/initialize
+Content-Type: application/json
+
+{
+  "conversation_id": "conv_test_001",
+  "character_id": "char_1782108709056",
+  "background": "赫蘿是狼之精靈，真面目是一頭巨狼，平常維持狼娘外型。",
+  "fewshots": [
+    "赫蘿，妳的耳朵剛才動了一下喔？\n汝、汝這大笨驢！那是因為風聲太吵了，絕對不是因為汝在看咱唄！",
+    "我們離約依茲還有多遠呢？\n汝啊，是嫌跟咱在一起的時間太長了嗎？"
+  ]
+}
+
+###
+# 【查詢 RAG 狀態】
+# 查詢聊天室 RAG 初始化的進度
+# 可能的狀態：pending（進行中）、ready（完成）、failed（失敗）
+GET http://localhost:6001/api/v1/rag/conversations/conv_test_001/status
+
+###
+# 【等待幾秒後再查詢】（模擬輪詢）
+GET http://localhost:6001/api/v1/rag/conversations/conv_test_001/status
+
+###
+# 【刪除 RAG 資料】
+# 清理某個聊天室的 RAG 資料（背景 + few-shots）
+DELETE http://localhost:6001/api/v1/rag/conversations/conv_test_001
+
+###
+# 【測試：初始化另一個聊天室】
+POST http://localhost:6001/api/v1/rag/conversations/initialize
+Content-Type: application/json
+
+{
+  "conversation_id": "conv_test_002",
+  "character_id": "char_1782108709056",
+  "background": "這是另一個測試聊天室的背景文本。",
+  "fewshots": []
+}
+
+###
+# 【查詢新聊天室的狀態】
+GET http://localhost:6001/api/v1/rag/conversations/conv_test_002/status
+
+###
+# 【測試：缺少必要參數】
+# 應該回傳 422 Unprocessable Entity
+POST http://localhost:6001/api/v1/rag/conversations/initialize
+Content-Type: application/json
+
+{
+  "conversation_id": "conv_test_003"
+}
+
+###
+# 【測試：查詢不存在的聊天室】
+# 應該回傳 404 Not Found
+GET http://localhost:6001/api/v1/rag/conversations/conv_nonexistent/status

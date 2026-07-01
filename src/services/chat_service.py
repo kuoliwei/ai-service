@@ -28,7 +28,7 @@ class ChatService:
         try:
             # 找到 behavior_specs 檔案路徑
             spec_dir = Path(__file__).parent.parent.parent / "behavior_specs"
-            spec_file = spec_dir / "persona_roleplay_behavior_specs_v1_ChineseVersion.json"
+            spec_file = spec_dir / "persona_roleplay_behavior_specs_v1_EnglishVersion.json"
 
             if not spec_file.exists():
                 raise FileNotFoundError(f"找不到 behavior_specs 檔案: {spec_file}")
@@ -61,30 +61,37 @@ class ChatService:
             dict，{status, message}
         """
         try:
-            print(f"\n🤖 [chat_service] 開始生成回應: conversationId={conversation_id}")
+            import time
+            start_time = time.time()
+            print(f"\n🤖 [chat_service] 開始生成回應: conversationId={conversation_id}, 時間={start_time}")
 
             # 1. 檢索 RAG 上下文
             rag_context = {}
             if conversation_history:
                 # 取最後一條訊息作為查詢文本
                 last_message = conversation_history[-1].get("text", "")
+                rag_start = time.time()
                 print(f"📚 [chat_service] 檢索 RAG 上下文，查詢文本: {last_message[:50]}...")
                 rag_context = rag_service.get_rag_context(
                     conversation_id=conversation_id,
                     user_message=last_message
                 )
-
-                # 詳細 log RAG 檢索結果
-                print(f"✅ [chat_service] RAG 檢索完成")
+                rag_duration = time.time() - rag_start
+                print(f"✅ [chat_service] RAG 檢索完成 (耗時 {rag_duration:.2f}s)")
                 if rag_context.get("character_background"):
-                    print(f"📖 [chat_service] 檢索到背景:\n{rag_context['character_background']}\n")
+                    print(f"📖 [chat_service] 檢索到最相關背景資訊:\n{rag_context['character_background']}\n")
                 else:
-                    print(f"⚠️  [chat_service] 未檢索到背景")
+                    print(f"⚠️  [chat_service] 未檢索到背景資訊")
 
                 fewshots = rag_context.get("fewshots", [])
-                print(f"💬 [chat_service] 檢索到 {len(fewshots)} 個 few-shot 範例")
+                print(f"💬 [chat_service] 檢索到 {len(fewshots)} 個最相關對話範例")
                 for idx, fewshot in enumerate(fewshots, 1):
-                    print(f"  範例 {idx}:\n{fewshot}\n")
+                    print(f"  最相關範例 {idx}:\n{fewshot}\n")
+
+                summaries = rag_context.get("summaries", [])
+                print(f"📜 [chat_service] 檢索到 {len(summaries)} 個最相關歷史摘要")
+                for idx, summary in enumerate(summaries, 1):
+                    print(f"  最相關摘要 {idx}:\n{summary}\n")
 
             # 2. 組裝 system prompt
             print(f"📝 [chat_service] 組裝 system prompt...")
@@ -110,7 +117,8 @@ class ChatService:
             print(f"📊 [chat_service] 訊息清單: {len(messages)} 筆 (1 個 system + {len(conversation_history)} 個對話)")
 
             # 4. 呼叫 Ollama 生成回應
-            print(f"🧠 [chat_service] 呼叫 Ollama 引擎...")
+            ollama_start = time.time()
+            print(f"🧠 [chat_service] 呼叫 Ollama 引擎... (開始時間: {ollama_start})")
             import ollama
 
             ollama_model = config.get("ollama.model", "llama2")
@@ -123,9 +131,11 @@ class ChatService:
             )
 
             ai_response = response['message']['content']
+            ollama_duration = time.time() - ollama_start
+            print(f"✅ [chat_service] 回應生成成功 (耗時 {ollama_duration:.2f}s)")
 
-            print(f"✅ [chat_service] 回應生成成功")
-
+            total_duration = time.time() - start_time
+            print(f"⏱️  [chat_service] 總耗時: {total_duration:.2f}s")
             return {
                 "status": "success",
                 "message": ai_response
@@ -133,6 +143,56 @@ class ChatService:
 
         except Exception as e:
             print(f"❌ [chat_service] 生成回應失敗: {e}")
+            return {
+                "status": "error",
+                "message": str(e)
+            }
+
+    def generate_summary(
+        self,
+        conversation_id: str,
+        prompt: str
+    ) -> dict:
+        """
+        生成對話摘要
+
+        參數：
+            conversation_id: str，聊天室 ID（用於日誌）
+            prompt: str，摘要提示詞
+
+        返回：
+            dict，{status, data: {summary}}
+        """
+        try:
+            print(f"\n📝 [chat_service] 生成摘要: conversationId={conversation_id}")
+            print(f"   提示詞: {prompt[:100]}...")
+
+            # 呼叫 Ollama 生成摘要
+            import ollama
+
+            ollama_model = config.get("ollama.model", "llama2")
+            ollama_temperature = config.get("ollama.temperature", 0.7)
+
+            response = ollama.chat(
+                model=ollama_model,
+                messages=[{"role": "user", "content": prompt}],
+                options={"temperature": ollama_temperature}
+            )
+
+            summary = response['message']['content']
+
+            print(f"✅ [chat_service] 摘要生成成功")
+            print(f"   摘要內容: {summary}\n")
+
+            return {
+                "status": "success",
+                "data": {
+                    "summary": summary
+                }
+            }
+
+        except Exception as e:
+            print(f"❌ [chat_service] 生成摘要失敗: {e}")
             return {
                 "status": "error",
                 "message": str(e)

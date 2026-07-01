@@ -1,33 +1,33 @@
 """
-Prompt Builder - 組裝最終的 System Prompt
-根據 behavior_specs、角色資訊、聊天紀錄來構建 system prompt
+Prompt Builder - Assemble the final System Prompt
+Build system prompt based on behavior_specs, character info, and conversation history
 """
 
 
 class PromptBuilder:
-    """System Prompt 組裝工具"""
+    """System Prompt assembly tool"""
 
     @staticmethod
     def build_system_prompt(behavior_specs: dict, character_info: dict, conversation_history: list = None, rag_context: dict = None) -> str:
         """
-        組裝最終的 system prompt
+        Assemble the final system prompt
 
-        參數：
-            behavior_specs: dict，從 behavior_specs JSON 讀進來
-                包含：Mission, Core Principles, Conversation Policies,
-                      Generation Policies, Writing Style, Response Format
-            character_info: dict，角色基本資訊
+        Parameters:
+            behavior_specs: dict, loaded from behavior_specs JSON
+                Contains: Mission, Core Principles, Conversation Policies,
+                         Generation Policies, Writing Style, Response Format
+            character_info: dict, character basic information
                 {name: str, gender: str, tags: list}
-            conversation_history: list，對話歷史（可選，用於上下文）
+            conversation_history: list, current unsummarized conversation history (optional, assembled into System Prompt)
                 [{role: str, text: str}, ...]
-            rag_context: dict，RAG 檢索結果（可選）
-                {character_background: str, fewshots: list}
+            rag_context: dict, RAG retrieval results (optional, contains most relevant background, examples, summaries)
+                {character_background: str, fewshots: list, summaries: list}
 
-        返回：
-            str，最終的 system prompt
+        Returns:
+            str, final system prompt
         """
 
-        # 1. 提取 behavior_specs 的各個部分
+        # 1. Extract each part of behavior_specs
         mission = behavior_specs.get("Mission", "")
         core_principles = behavior_specs.get("Core Principles", [])
         conversation_policies = behavior_specs.get("Conversation Policies", [])
@@ -35,97 +35,103 @@ class PromptBuilder:
         writing_style = behavior_specs.get("Writing Style", [])
         response_format = behavior_specs.get("Response Format", {})
 
-        # 2. 提取角色資訊
-        char_name = character_info.get("name", "未定義")
-        char_gender = character_info.get("gender", "未知")
+        # 2. Extract character information
+        char_name = character_info.get("name", "Undefined")
+        char_gender = character_info.get("gender", "Unknown")
         char_tags = character_info.get("tags", [])
-        tag_str = ", ".join(char_tags) if char_tags else "無"
+        tag_str = ", ".join(char_tags) if char_tags else "None"
 
-        # 3. 構建核心身份邊界
-        boundary_warning = f"""### ⚠️ 核心身份邊界 (最高優先級):
-- 你當前的身份是【{char_name}】。
-- 嚴禁代替使用者決定心理、想法或行為。
-- 當完成回應後，請立即停止輸出，等待使用者輸入。"""
-
-        # 4. 構建 Core Principles 部分
+        # 3. Build Core Principles section
         principles_str = ""
         if core_principles:
-            principles_str = "\n## 核心原則\n"
+            principles_str = "\n## Core Principles\n"
             for principle in core_principles:
                 title = principle.get("title", "")
                 description = principle.get("description", "")
                 principles_str += f"- **{title}**: {description}\n"
 
-        # 5. 構建 Conversation Policies 部分
+        # 5. Build Conversation Policies section
         conversation_policies_str = ""
         if conversation_policies:
-            conversation_policies_str = "\n## 對話政策\n"
+            conversation_policies_str = "\n## Conversation Policies\n"
             for policy in conversation_policies:
                 conversation_policies_str += f"- {policy}\n"
 
-        # 6. 構建 Generation Policies 部分
+        # 6. Build Generation Policies section
         generation_policies_str = ""
         if generation_policies:
-            generation_policies_str = "\n## 生成政策\n"
+            generation_policies_str = "\n## Generation Policies\n"
             for policy in generation_policies:
                 generation_policies_str += f"- {policy}\n"
 
-        # 7. 構建 Writing Style 部分
+        # 7. Build Writing Style section
         writing_style_str = ""
         if writing_style:
-            writing_style_str = "\n## 寫作風格\n"
+            writing_style_str = "\n## Writing Style\n"
             for style in writing_style:
                 writing_style_str += f"- {style}\n"
 
-        # 8. 構建 Response Format 部分
+        # 8. Build Response Format section
         response_format_str = ""
         if response_format:
             rules = response_format.get("rules", [])
             if rules:
-                response_format_str = "\n## 回應格式\n"
+                response_format_str = "\n## Response Format\n"
                 for rule in rules:
                     response_format_str += f"- {rule}\n"
 
-        # 9. 構建角色資訊部分
+        # 9. Build character information section
         character_info_str = f"""
-## 角色資訊
-- **姓名**: {char_name}
-- **性別**: {char_gender}
-- **核心特徵**: [{tag_str}]"""
+## Character Information
+- **Name**: {char_name}
+- **Gender**: {char_gender}
+- **Core Traits**: [{tag_str}]"""
 
-        # 10. 構建 RAG 上下文部分
+        # 10. Build RAG context section
         rag_context_str = ""
         if rag_context:
-            rag_context_str = "\n## 角色背景與範例"
+            rag_context_str = "\n## Character Background and Examples"
 
-            # 添加角色背景
+            # Add most relevant character background
             if rag_context.get("character_background"):
-                rag_context_str += f"\n### 相關背景資訊\n{rag_context['character_background']}"
+                rag_context_str += f"\n### Most Relevant Background Information\n{rag_context['character_background']}"
 
-            # 添加 few-shots
+            # Add most relevant dialogue examples
             if rag_context.get("fewshots"):
-                rag_context_str += "\n### 對話範例"
+                rag_context_str += "\n### Most Relevant Dialogue Examples"
                 for idx, fewshot in enumerate(rag_context["fewshots"], 1):
-                    rag_context_str += f"\n**範例 {idx}:**\n{fewshot}"
+                    rag_context_str += f"\n**Most Relevant Example {idx}:**\n{fewshot}"
 
-        # 11. 組裝最終 system prompt
-        prompt = f"""# 系統角色扮演指令
+            # Add most relevant history summary (placed at the end)
+            if rag_context.get("summaries"):
+                rag_context_str += "\n### Most Relevant History Summary"
+                for idx, summary in enumerate(rag_context["summaries"], 1):
+                    rag_context_str += f"\n**Most Relevant Summary {idx}:**\n{summary}"
 
-## 任務
+        # 11. Build current conversation context section
+        conversation_context_str = ""
+        if conversation_history:
+            conversation_context_str = "\n## Current Conversation Context"
+            for msg in conversation_history:
+                role_label = "User" if msg.get("role") == "user" else "Character"
+                conversation_context_str += f"\n【{role_label}】\n{msg.get('text', '')}"
+
+        # 12. Assemble the final system prompt
+        prompt = f"""# System Roleplay Instructions
+
+## Mission
 {mission}
 
-{boundary_warning}
-
-{principles_str}{conversation_policies_str}{generation_policies_str}{writing_style_str}{response_format_str}{character_info_str}{rag_context_str}
+{principles_str}{conversation_policies_str}{generation_policies_str}{writing_style_str}{response_format_str}{character_info_str}{rag_context_str}{conversation_context_str}
 """
 
         final_prompt = prompt.strip()
-        print(f"\n🔧 [prompt_builder] 最終 System Prompt:\n{'='*80}")
+        print(f"\n🔧 [prompt_builder] Final System Prompt:\n{'='*80}")
         print(final_prompt)
         print(f"{'='*80}\n")
 
         return final_prompt
 
 
-# 全局實例
+# Global instance
 prompt_builder = PromptBuilder()

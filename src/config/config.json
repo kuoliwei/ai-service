@@ -20,7 +20,8 @@
     "chunkOverlap": 100,
     "search": {
       "backgroundLimit": 1,
-      "fewshotsLimit": 1
+      "fewshotsLimit": 1,
+      "summariesLimit": 1
     }
   },
   "gateway": {

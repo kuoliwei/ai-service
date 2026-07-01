@@ -158,16 +158,18 @@ class RAGRepository:
         query: str
     ) -> List[Dict]:
         """
-        搜尋角色背景
+        搜尋最相關背景資訊
 
         參數：
             conversation_id: 聊天室 ID
             query: 搜尋文本
 
         返回：
-            搜尋結果
+            最相關背景資訊搜尋結果
         """
-        limit = config.get("rag.search.backgroundLimit", 1)
+        limit = config.get("rag.search.backgroundLimit")
+        if limit is None:
+            raise ValueError("rag.search.backgroundLimit must be set in config")
 
         return self.vector_store.search(
             collection_name="characters",
@@ -182,16 +184,18 @@ class RAGRepository:
         query: str
     ) -> List[Dict]:
         """
-        搜尋 Few-Shot 範例
+        搜尋最相關對話範例
 
         參數：
             conversation_id: 聊天室 ID
             query: 搜尋文本
 
         返回：
-            搜尋結果
+            最相關對話範例搜尋結果
         """
-        limit = config.get("rag.search.fewshotsLimit", 3)
+        limit = config.get("rag.search.fewshotsLimit")
+        if limit is None:
+            raise ValueError("rag.search.fewshotsLimit must be set in config")
 
         return self.vector_store.search(
             collection_name="fewshots",
@@ -199,6 +203,112 @@ class RAGRepository:
             limit=limit,
             filters={"conversation_id": conversation_id}
         )
+
+    def search_summaries(
+        self,
+        conversation_id: str,
+        query: str
+    ) -> List[Dict]:
+        """
+        搜尋最相關歷史摘要
+
+        參數：
+            conversation_id: 聊天室 ID
+            query: 搜尋文本
+
+        返回：
+            最相關歷史摘要結果
+        """
+        limit = config.get("rag.search.summariesLimit")
+        if limit is None:
+            raise ValueError("rag.search.summariesLimit must be set in config")
+
+        return self.vector_store.search(
+            collection_name="summaries",
+            query=query,
+            limit=limit,
+            filters={"conversation_id": conversation_id}
+        )
+
+    def add_summary(
+        self,
+        conversation_id: str,
+        summary: str
+    ) -> bool:
+        """
+        添加對話摘要到向量資料庫
+
+        參數：
+            conversation_id: 聊天室 ID
+            summary: 摘要文本
+
+        返回：
+            是否成功
+        """
+        # 為摘要建立文檔
+        doc = {
+            "id": str(uuid.uuid4()),
+            "text": summary,
+            "conversation_id": conversation_id,
+            "type": "summary",
+            "timestamp": __import__('time').time()
+        }
+
+        return self.vector_store.upsert_documents(
+            "summaries",
+            [doc],
+            metadata_fields=["conversation_id", "type", "timestamp"]
+        )
+
+    # ===== 資料驗證 =====
+
+    def get_conversation_data(self, conversation_id: str) -> Dict:
+        """
+        查詢某個聊天室的所有 RAG 資料（用於驗證初始化結果）
+
+        參數：
+            conversation_id: 聊天室 ID
+
+        返回：
+            {
+              "characters": [{"text": "...", "type": "background", "chunk_index": 0}, ...],
+              "fewshots": [{"text": "...", "type": "few_shot", "index": 0}, ...]
+            }
+        """
+        try:
+            # 建立過濾條件
+            filter_condition = Filter(
+                must=[
+                    FieldCondition(
+                        key="conversation_id",
+                        match=MatchValue(value=conversation_id)
+                    )
+                ]
+            )
+
+            # 查詢 characters collection
+            characters_result = self.vector_store.client.scroll(
+                collection_name="characters",
+                limit=1000,
+                scroll_filter=filter_condition
+            )
+            characters = [point.payload for point in characters_result[0]] if characters_result[0] else []
+
+            # 查詢 fewshots collection
+            fewshots_result = self.vector_store.client.scroll(
+                collection_name="fewshots",
+                limit=1000,
+                scroll_filter=filter_condition
+            )
+            fewshots = [point.payload for point in fewshots_result[0]] if fewshots_result[0] else []
+
+            return {
+                "characters": characters,
+                "fewshots": fewshots
+            }
+        except Exception as e:
+            print(f"✗ Failed to get conversation data: {e}")
+            return {"characters": [], "fewshots": []}
 
     # ===== 資料刪除 =====
 
