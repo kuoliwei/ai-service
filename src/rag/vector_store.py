@@ -78,11 +78,20 @@ class QdrantVectorStore:
         返回：
             是否成功
         """
+        import time
+        upsert_start = time.time()
         try:
+            print(f"\n📤 [vector_store] upsert_documents 開始: collection={collection_name}, 文檔數={len(documents)}, 時間={upsert_start}")
+            embedding_time = 0
             points = []
             for idx, doc in enumerate(documents):
                 # 向量化文本
+                embed_start = time.time()
                 embedding = self.embedder.embed_text(doc.get("text", ""))
+                embed_end = time.time()
+                embedding_time += (embed_end - embed_start)
+                if idx == 0 or (idx + 1) % max(1, len(documents) // 3) == 0:
+                    print(f"   ├─ embedding 進度: {idx + 1}/{len(documents)}, 單次耗時={embed_end - embed_start:.2f}秒")
 
                 # 準備元數據（payload）
                 payload = {"text": doc.get("text", "")}
@@ -105,14 +114,21 @@ class QdrantVectorStore:
                 points.append(point)
 
             # 批量上傳
+            upsert_db_start = time.time()
+            print(f"   ├─ 【embedding 總耗時】{embedding_time:.2f}秒")
+            print(f"   ├─ 【即將連接 Qdrant】時間={upsert_db_start}")
             self.client.upsert(
                 collection_name=collection_name,
                 points=points
             )
-            print(f"✓ Upserted {len(points)} documents to '{collection_name}'")
+            upsert_db_end = time.time()
+            print(f"   ├─ 【Qdrant upsert 耗時】{upsert_db_end - upsert_db_start:.2f}秒")
+            total_upsert = time.time() - upsert_start
+            print(f"✓ Upserted {len(points)} documents to '{collection_name}', 總耗時={total_upsert:.2f}秒")
             return True
         except Exception as e:
-            print(f"✗ Failed to upsert documents: {e}")
+            error_time = time.time() - upsert_start
+            print(f"✗ Failed to upsert documents: {e}, 耗時={error_time:.2f}秒")
             return False
 
     def search(
@@ -179,8 +195,10 @@ class QdrantVectorStore:
 
             return documents
         except Exception as e:
+            # 🆕 【被動報錯】不捕獲異常，直接拋出
+            # 這樣 Qdrant 不可用時，整個流程會停止
             print(f"✗ Search failed: {e}")
-            return []
+            raise  # ← 重新拋出異常，讓上層知道出錯了
 
     def delete_collection(self, collection_name: str) -> bool:
         """刪除集合"""
@@ -191,6 +209,23 @@ class QdrantVectorStore:
         except Exception as e:
             print(f"✗ Failed to delete collection: {e}")
             return False
+
+    def check_connection(self):
+        """
+        檢查 Qdrant 連接狀態
+
+        拋出：
+            Exception 如果 Qdrant 無法連接
+        """
+        try:
+            # 嘗試獲取集合列表（輕量級操作）
+            self.client.get_collections()
+            print(f"✅ [vector_store] Qdrant 連接正常")
+        except Exception as e:
+            # 🆕 【被動報錯】直接拋異常，而不是返回 False
+            error_msg = f"Qdrant connection failed: {str(e)}"
+            print(f"❌ [vector_store] Qdrant 連接失敗: {error_msg}")
+            raise Exception(error_msg)
 
     def list_collections(self) -> List[str]:
         """列出所有集合"""

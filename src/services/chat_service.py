@@ -65,6 +65,16 @@ class ChatService:
             start_time = time.time()
             print(f"\n🤖 [chat_service] 開始生成回應: conversationId={conversation_id}, 時間={start_time}")
 
+            # 🆕 【實驗性註解】暫時停用健檢觸發，觀察無健檢時錯誤是否仍能正確傳播
+            # # 🆕 【同步檢查】檢查 RAG 資料庫健康狀態
+            # print(f"🏥 [chat_service] 檢查 RAG 資料庫健康狀態...")
+            # try:
+            #     rag_service.check_rag_health()
+            #     print(f"✅ [chat_service] RAG 資料庫健康，繼續生成回應")
+            # except Exception as e:
+            #     # 【被動報錯】如果 RAG 不可用，立即拋錯，不繼續執行
+            #     raise Exception(f"RAG health check failed: {str(e)}")
+
             # 1. 檢索 RAG 上下文
             rag_context = {}
             if conversation_history:

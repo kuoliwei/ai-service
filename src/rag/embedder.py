@@ -25,7 +25,9 @@ class OllamaEmbedder:
         返回：
             浮點數列表（向量）
         """
+        import time
         try:
+            embed_start = time.time()
             response = requests.post(
                 f"{self.base_url}/api/embeddings",
                 json={
@@ -34,8 +36,13 @@ class OllamaEmbedder:
                 },
                 timeout=self.timeout
             )
+            embed_end = time.time()
             response.raise_for_status()
-            return response.json()["embedding"]
+            result = response.json()["embedding"]
+            # 只在較長的調用時才打印日誌，避免太多輸出
+            if embed_end - embed_start > 0.5:
+                print(f"   🧠 [embedder] embed_text 耗時={embed_end - embed_start:.2f}秒")
+            return result
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"Failed to embed text: {e}")
 

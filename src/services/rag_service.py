@@ -16,6 +16,17 @@ class RAGService:
         # 🆕 初始化狀態追蹤：key = conversation_id, value = { status: 'pending' | 'ready' | 'failed', error?: str }
         self.initialization_jobs = {}
 
+    # ===== 健康檢查 =====
+
+    def check_rag_health(self):
+        """
+        檢查 RAG 資料庫健康狀態（同步檢查）
+
+        拋出：
+            Exception 如果 Qdrant 無法連接
+        """
+        self.repository.vector_store.check_connection()
+
     # ===== 聊天室初始化（非同步） =====
 
     def initialize_conversation(
@@ -29,10 +40,12 @@ class RAGService:
         啟動聊天室 RAG 初始化（真正的背景執行）
 
         流程：
-        1. 立即標記狀態為 'pending'
-        2. 用 threading 啟動背景任務 _do_initialize_conversation_background()
-        3. 立即回傳 202（不等待初始化完成）
-        4. 背景線程執行：完成時標記為 'ready'，失敗時標記為 'failed'
+        1. 【新增】檢查 RAG 資料庫連接（同步，立即）
+        2. 如果不可用，立即返回 failed（HTTP 503）
+        3. 立即標記狀態為 'pending'
+        4. 用 threading 啟動背景任務 _do_initialize_conversation_background()
+        5. 立即回傳 202（不等待初始化完成）
+        6. 背景線程執行：完成時標記為 'ready'，失敗時標記為 'failed'
 
         參數：
             conversation_id: 聊天室 ID
@@ -42,11 +55,27 @@ class RAGService:
 
         返回：
             { status: 'accepted' }（表示已接受，背景處理中）
+            或 { status: 'failed' }（如果 RAG 資料庫不可用）
         """
         print(f"\n📥 [rag_service] 初始化請求: conversationId={conversation_id}")
         print(f"   ├─ characterId: {character_id}")
         print(f"   ├─ background: {len(background or '')} 字")
         print(f"   ├─ fewshots: {len(fewshots or [])} 個")
+
+        # 🆕 【實驗性註解】暫時停用健檢觸發，觀察無健檢時錯誤是否仍能正確傳播
+        # # 🆕 【健康檢查】先檢查 RAG 資料庫是否可用（同步、立即）
+        # print(f"   ├─ 【健康檢查】檢查 RAG 資料庫連接...")
+        # try:
+        #     self.repository.check_connection()
+        #     print(f"   ├─ ✅ RAG 資料庫連接正常，可以開始初始化")
+        # except Exception as e:
+        #     # 【被動報錯】如果 RAG 不可用，立即拋錯，不繼續執行
+        #     print(f"   ❌ RAG 資料庫不可用: {str(e)}")
+        #     self.initialization_jobs[conversation_id] = {
+        #         "status": "failed",
+        #         "error": str(e)
+        #     }
+        #     raise Exception(f"RAG health check failed: {str(e)}")
 
         # 標記狀態為 pending（正在處理）
         self.initialization_jobs[conversation_id] = { "status": "pending" }
@@ -86,15 +115,20 @@ class RAGService:
         返回：
             無（結果存於 self.initialization_jobs[conversation_id]）
         """
+        import time
+        start_time = time.time()
         try:
-            print(f"\n🧠 [rag_service] 【背景線程】初始化開始: conversationId={conversation_id}")
+            print(f"\n🧠 [rag_service] 【背景線程】初始化開始: conversationId={conversation_id}, 時間={start_time}")
 
             # 1. 添加角色背景
             if background:
-                print(f"   ├─ 📖 添加背景文本 ({len(background)} 字)...")
+                t1 = time.time()
+                print(f"   ├─ 📖 添加背景文本 ({len(background)} 字)... 時間={t1}")
                 bg_success = self.repository.add_character_background(
                     conversation_id, character_id, background
                 )
+                t2 = time.time()
+                print(f"   ├─ 背景文本操作耗時: {t2 - t1:.2f}秒")
                 if not bg_success:
                     raise Exception("Failed to add character background")
                 print(f"   ├─ ✅ 背景文本已存入 Qdrant")
@@ -103,10 +137,13 @@ class RAGService:
 
             # 2. 添加 Few-Shots
             if fewshots:
-                print(f"   ├─ 💬 添加 Few-Shot 範例 ({len(fewshots)} 個)...")
+                t3 = time.time()
+                print(f"   ├─ 💬 添加 Few-Shot 範例 ({len(fewshots)} 個)... 時間={t3}")
                 fs_success = self.repository.add_fewshots(
                     conversation_id, character_id, fewshots
                 )
+                t4 = time.time()
+                print(f"   ├─ Few-Shots 操作耗時: {t4 - t3:.2f}秒")
                 if not fs_success:
                     raise Exception("Failed to add few-shots")
                 print(f"   ├─ ✅ Few-Shots 已存入 Qdrant")
@@ -114,8 +151,11 @@ class RAGService:
                 print(f"   ├─ ⊘ 無 Few-Shots")
 
             # 成功：標記狀態為 ready
+            end_time = time.time()
+            total_time = end_time - start_time
             self.initialization_jobs[conversation_id] = { "status": "ready" }
             print(f"   ✅ 【背景線程】初始化完成，標記狀態: ready")
+            print(f"   ⏱️  【總耗時】{total_time:.2f}秒")
 
             # 🆕 驗證 RAG 數據（列出已保存的資料）
             print(f"\n   📊 【背景線程】RAG 數據驗證 (conversationId={conversation_id}):")
@@ -184,25 +224,21 @@ class RAGService:
 
         返回：
             清理結果
+
+        拋出：
+            Exception 如果清理失敗（Qdrant 不可用等）
         """
-        try:
-            success = self.repository.delete_conversation_data(conversation_id)
-            if not success:
-                raise Exception("Failed to delete conversation data")
+        # 🆕 【被動報錯】不捕獲異常，讓 repository 的異常直接傳播
+        self.repository.delete_conversation_data(conversation_id)
 
-            # 🆕 也要刪除內存中的 job 狀態記錄
-            if conversation_id in self.initialization_jobs:
-                del self.initialization_jobs[conversation_id]
+        # 也要刪除內存中的 job 狀態記錄
+        if conversation_id in self.initialization_jobs:
+            del self.initialization_jobs[conversation_id]
 
-            return {
-                "status": "success",
-                "message": f"Conversation {conversation_id} RAG data cleaned up"
-            }
-        except Exception as e:
-            return {
-                "status": "error",
-                "message": str(e)
-            }
+        return {
+            "status": "success",
+            "message": f"Conversation {conversation_id} RAG data cleaned up"
+        }
 
     # ===== 檢索上下文 =====
 
@@ -220,40 +256,37 @@ class RAGService:
 
         返回：
             包含背景、few-shots 和最相關歷史摘要的上下文
+
+        拋出：
+            如果 RAG 資料庫（Qdrant）不可用，直接拋異常（被動報錯）
         """
-        try:
-            # 1. 搜尋最相關背景資訊
-            background = self.repository.search_character_background(
-                conversation_id, user_message
-            )
-            background_text = background[0]["text"] if background else None
+        # 🆕 【被動報錯】不捕獲異常，讓 Qdrant 不可用時直接拋出
+        # 這樣 chat_service 才能知道 RAG 失敗，整個流程停止
 
-            # 2. 搜尋最相關對話範例
-            fewshots = self.repository.search_fewshots(
-                conversation_id, user_message
-            )
-            fewshots_text = [fs["text"] for fs in fewshots] if fewshots else []
+        # 1. 搜尋最相關背景資訊
+        background = self.repository.search_character_background(
+            conversation_id, user_message
+        )
+        background_text = background[0]["text"] if background else None
 
-            # 3. 搜尋最相關歷史摘要
-            summaries = self.repository.search_summaries(
-                conversation_id, user_message
-            )
-            summaries_text = [s["text"] for s in summaries] if summaries else []
+        # 2. 搜尋最相關對話範例
+        fewshots = self.repository.search_fewshots(
+            conversation_id, user_message
+        )
+        fewshots_text = [fs["text"] for fs in fewshots] if fewshots else []
 
-            return {
-                "status": "success",
-                "character_background": background_text,
-                "fewshots": fewshots_text,
-                "summaries": summaries_text
-            }
-        except Exception as e:
-            return {
-                "status": "error",
-                "message": str(e),
-                "character_background": None,
-                "fewshots": [],
-                "summaries": []
-            }
+        # 3. 搜尋最相關歷史摘要
+        summaries = self.repository.search_summaries(
+            conversation_id, user_message
+        )
+        summaries_text = [s["text"] for s in summaries] if summaries else []
+
+        return {
+            "status": "success",
+            "character_background": background_text,
+            "fewshots": fewshots_text,
+            "summaries": summaries_text
+        }
 
     # ===== 摘要管理 =====
 
@@ -271,28 +304,25 @@ class RAGService:
 
         返回：
             存儲結果
+
+        拋出：
+            Exception 如果存儲失敗（RAG 不可用或其他錯誤）
         """
-        try:
-            print(f"💾 [rag_service] 存入摘要: conversationId={conversation_id}")
-            print(f"   摘要內容: {summary}\n")
+        print(f"💾 [rag_service] 存入摘要: conversationId={conversation_id}")
+        print(f"   摘要內容: {summary}\n")
 
-            success = self.repository.add_summary(
-                conversation_id, summary
-            )
-            if not success:
-                raise Exception("Failed to add summary to vector database")
+        # 🆕 【被動報錯】不捕獲異常，讓 repository 的異常直接傳播
+        success = self.repository.add_summary(
+            conversation_id, summary
+        )
+        if not success:
+            raise Exception("Failed to add summary to vector database")
 
-            return {
-                "status": "success",
-                "conversation_id": conversation_id,
-                "message": "Summary added to vector database"
-            }
-        except Exception as e:
-            print(f"❌ [rag_service] 存入摘要失敗: {e}")
-            return {
-                "status": "error",
-                "message": str(e)
-            }
+        return {
+            "status": "success",
+            "conversation_id": conversation_id,
+            "message": "Summary added to vector database"
+        }
 
     # ===== 系統管理 =====
 

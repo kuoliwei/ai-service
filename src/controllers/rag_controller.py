@@ -57,10 +57,18 @@ async def initialize_conversation(request: InitializeConversationRequest):
         print(f"✅ [rag_controller] 初始化請求已接受，背景處理中")
         return result
     except Exception as e:
-        print(f"❌ [rag_controller] 異常: {type(e).__name__}: {str(e)}")
+        error_msg = str(e)
+        print(f"❌ [rag_controller] 異常: {type(e).__name__}: {error_msg}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+
+        # 🆕 【統一錯誤處理】區分健康檢查失敗和其他錯誤
+        if "RAG health check failed" in error_msg or "Qdrant connection failed" in error_msg:
+            # RAG 不可用 → 503 Service Unavailable
+            raise HTTPException(status_code=503, detail=error_msg)
+        else:
+            # 其他錯誤 → 500 Internal Server Error
+            raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.delete("/conversations/{conversation_id}")
@@ -71,14 +79,25 @@ async def cleanup_conversation(conversation_id: str):
     當 chat-service 刪除聊天室時呼叫此端點
     """
     try:
+        print(f"🗑️ [rag_controller] 清理 RAG 資料: conversationId={conversation_id}")
+        # 🆕 【被動報錯】如果 rag_service 拋異常，直接向上傳播
         result = rag_service.cleanup_conversation(conversation_id)
 
-        if result["status"] == "error":
-            raise HTTPException(status_code=500, detail=result["message"])
-
+        print(f"✅ [rag_controller] RAG 資料清理成功")
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        print(f"❌ [rag_controller] 異常: {type(e).__name__}: {error_msg}")
+        import traceback
+        traceback.print_exc()
+
+        # 🆕 區分 RAG 連接錯誤和其他錯誤
+        if "Qdrant" in error_msg or "connect" in error_msg.lower() or "refused" in error_msg.lower():
+            # RAG 不可用 → 503 Service Unavailable
+            raise HTTPException(status_code=503, detail=error_msg)
+        else:
+            # 其他錯誤 → 500 Internal Server Error
+            raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.get("/conversations/{conversation_id}/context")
@@ -157,19 +176,24 @@ async def add_summary(request: AddSummaryRequest):
     """
     try:
         print(f"📥 [rag_controller] 存入摘要: conversationId={request.conversation_id}")
+        # 🆕 【被動報錯】如果 rag_service 拋異常，直接向上傳播
         result = rag_service.add_summary(
             conversation_id=request.conversation_id,
             summary=request.summary
         )
 
-        if result["status"] == "error":
-            print(f"❌ [rag_controller] rag_service 返回錯誤: {result['message']}")
-            raise HTTPException(status_code=500, detail=result["message"])
-
         print(f"✅ [rag_controller] 摘要存儲成功")
         return result
     except Exception as e:
-        print(f"❌ [rag_controller] 異常: {type(e).__name__}: {str(e)}")
+        error_msg = str(e)
+        print(f"❌ [rag_controller] 異常: {type(e).__name__}: {error_msg}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+
+        # 🆕 區分 RAG 相關錯誤和其他錯誤
+        if "Qdrant" in error_msg or "connection" in error_msg.lower():
+            # RAG 不可用 → 503 Service Unavailable
+            raise HTTPException(status_code=503, detail=error_msg)
+        else:
+            # 其他錯誤 → 500 Internal Server Error
+            raise HTTPException(status_code=500, detail=error_msg)

@@ -23,9 +23,16 @@ async def startup_event():
     print("🚀 [app.py] 初始化 RAG 集合...")
     try:
         # nomic-embed-text 產生 768 維向量
-        vector_store.create_collection(config.CHARACTER_COLLECTION, vector_size=768)
-        vector_store.create_collection(config.FEWSHOTS_COLLECTION, vector_size=768)
-        vector_store.create_collection("summaries", vector_size=768)
+        # 檢查返回值，失敗時拋出異常
+        if not vector_store.create_collection(config.CHARACTER_COLLECTION, vector_size=768):
+            raise Exception(f"Failed to create collection: {config.CHARACTER_COLLECTION}")
+
+        if not vector_store.create_collection(config.FEWSHOTS_COLLECTION, vector_size=768):
+            raise Exception(f"Failed to create collection: {config.FEWSHOTS_COLLECTION}")
+
+        if not vector_store.create_collection("summaries", vector_size=768):
+            raise Exception("Failed to create collection: summaries")
+
         print("✅ [app.py] RAG 集合初始化成功")
     except Exception as e:
         print(f"❌ [app.py] RAG 集合初始化失敗: {e}")

@@ -6,7 +6,6 @@ from typing import List, Dict, Optional
 import uuid
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from src.rag.vector_store import vector_store
-from src.rag.data_loader import data_loader
 from src.config.config_loader import config
 
 
@@ -15,7 +14,6 @@ class RAGRepository:
 
     def __init__(self):
         self.vector_store = vector_store
-        self.data_loader = data_loader
         self.max_chunk_size = config.get("rag.chunkSize", 500)
         self.chunk_overlap = config.get("rag.chunkOverlap", 100)
 
@@ -51,6 +49,17 @@ class RAGRepository:
         return chunks
 
     # ===== Collection 管理 =====
+
+    def check_connection(self):
+        """
+        檢查 RAG 數據庫連接狀態
+
+        拋出：
+            Exception 如果連接失敗
+        """
+        print(f"📡 [rag_repository] 檢查 Qdrant 連接...")
+        # 🆕 【被動報錯】vector_store 會拋異常，直接傳播上去
+        self.vector_store.check_connection()
 
     def create_collection(self, collection_name: str) -> bool:
         """建立向量集合"""
@@ -321,35 +330,41 @@ class RAGRepository:
 
         返回：
             是否成功
+
+        拋出：
+            Exception 如果刪除失敗（Qdrant 不可用等）
         """
-        try:
-            # 建立過濾條件
-            filter_condition = Filter(
-                must=[
-                    FieldCondition(
-                        key="conversation_id",
-                        match=MatchValue(value=conversation_id)
-                    )
-                ]
-            )
+        # 🆕 【被動報錯】不捕獲異常，Qdrant 不可用時直接拋出
+        # 建立過濾條件
+        filter_condition = Filter(
+            must=[
+                FieldCondition(
+                    key="conversation_id",
+                    match=MatchValue(value=conversation_id)
+                )
+            ]
+        )
 
-            # 刪除角色背景
-            self.vector_store.client.delete(
-                collection_name="characters",
-                points_selector=filter_condition
-            )
+        # 刪除角色背景
+        self.vector_store.client.delete(
+            collection_name="characters",
+            points_selector=filter_condition
+        )
 
-            # 刪除 few-shots
-            self.vector_store.client.delete(
-                collection_name="fewshots",
-                points_selector=filter_condition
-            )
+        # 刪除 few-shots
+        self.vector_store.client.delete(
+            collection_name="fewshots",
+            points_selector=filter_condition
+        )
 
-            print(f"✓ Deleted conversation data for {conversation_id}")
-            return True
-        except Exception as e:
-            print(f"✗ Failed to delete conversation data: {e}")
-            return False
+        # 刪除歷史摘要
+        self.vector_store.client.delete(
+            collection_name="summaries",
+            points_selector=filter_condition
+        )
+
+        print(f"✓ Deleted conversation data for {conversation_id}")
+        return True
 
 
 # 全局實例
