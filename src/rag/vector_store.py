@@ -127,15 +127,16 @@ class QdrantVectorStore:
             print(f"✓ Upserted {len(points)} documents to '{collection_name}', 總耗時={total_upsert:.2f}秒")
             return True
         except Exception as e:
+            # 🆕 【被動報錯】不吞錯，直接拋出，讓上層拿到具體錯誤（如連線失敗）
             error_time = time.time() - upsert_start
             print(f"✗ Failed to upsert documents: {e}, 耗時={error_time:.2f}秒")
-            return False
+            raise
 
     def search(
         self,
         collection_name: str,
         query: str,
-        limit: int = 3,
+        limit: int,
         score_threshold: float = 0.0,
         filters: Dict = None
     ) -> List[Dict]:
@@ -199,6 +200,25 @@ class QdrantVectorStore:
             # 這樣 Qdrant 不可用時，整個流程會停止
             print(f"✗ Search failed: {e}")
             raise  # ← 重新拋出異常，讓上層知道出錯了
+
+    def delete_points(self, collection_name: str, point_ids: list):
+        """
+        按 point id 精準刪除指定文檔
+
+        參數：
+            collection_name: 集合名稱
+            point_ids: 要刪除的 point id 列表（UUID 字串）
+
+        拋出：
+            Exception 如果刪除失敗（Qdrant 不可用等）——【被動報錯】不捕獲
+        """
+        from qdrant_client.models import PointIdsList
+        print(f"🗑️ [vector_store] 刪除 points: collection={collection_name}, ids={point_ids}")
+        self.client.delete(
+            collection_name=collection_name,
+            points_selector=PointIdsList(points=point_ids)
+        )
+        print(f"✓ [vector_store] 已刪除 {len(point_ids)} 個 points")
 
     def delete_collection(self, collection_name: str) -> bool:
         """刪除集合"""

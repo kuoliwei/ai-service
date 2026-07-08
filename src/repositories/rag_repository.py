@@ -99,6 +99,7 @@ class RAGRepository:
             return True
 
         # 為每個切片建立文檔
+        # 🆕 type 明確標示為 character_background（與 protagonist_background 區分）
         documents = []
         for idx, chunk in enumerate(chunks):
             doc = {
@@ -106,7 +107,7 @@ class RAGRepository:
                 "text": chunk,
                 "conversation_id": conversation_id,
                 "character_id": character_id,
-                "type": "background",
+                "type": "character_background",
                 "chunk_index": idx
             }
             documents.append(doc)
@@ -116,6 +117,62 @@ class RAGRepository:
             documents,
             metadata_fields=["conversation_id", "character_id", "type", "chunk_index"]
         )
+
+    def replace_protagonist_background(
+        self,
+        conversation_id: str,
+        background_text: str
+    ) -> bool:
+        """
+        更新主角（主人公）背景到向量資料庫（先刪舊切片，再存新切片）
+
+        與角色背景同一個 characters collection，以 type='protagonist_background' 區分。
+        使用者在聊天室編輯並儲存主角人設時呼叫。
+
+        參數：
+            conversation_id: 聊天室 ID
+            background_text: 主角背景文本（可為空——空則只刪不存，等同清除）
+
+        拋出：
+            Exception 如果 Qdrant 操作失敗——【被動報錯】不捕獲
+        """
+        # 1. 先刪除舊的主角背景切片（重複儲存不累積髒資料）
+        filter_condition = Filter(
+            must=[
+                FieldCondition(key="conversation_id", match=MatchValue(value=conversation_id)),
+                FieldCondition(key="type", match=MatchValue(value="protagonist_background"))
+            ]
+        )
+        self.vector_store.client.delete(
+            collection_name="characters",
+            points_selector=filter_condition
+        )
+        print(f"✓ [rag_repository] 舊主角背景切片已清除: conversationId={conversation_id}")
+
+        # 2. 切片並存入新的背景（文本為空則到此為止）
+        chunks = self._chunk_text(background_text)
+        if not chunks:
+            print(f"✓ [rag_repository] 主角背景為空，僅清除舊資料")
+            return True
+
+        documents = []
+        for idx, chunk in enumerate(chunks):
+            doc = {
+                "id": str(uuid.uuid4()),
+                "text": chunk,
+                "conversation_id": conversation_id,
+                "type": "protagonist_background",
+                "chunk_index": idx
+            }
+            documents.append(doc)
+
+        self.vector_store.upsert_documents(
+            "characters",
+            documents,
+            metadata_fields=["conversation_id", "type", "chunk_index"]
+        )
+        print(f"✓ [rag_repository] 主角背景已存入: {len(documents)} 片")
+        return True
 
     def add_fewshots(
         self,
@@ -180,11 +237,70 @@ class RAGRepository:
         if limit is None:
             raise ValueError("rag.search.backgroundLimit must be set in config")
 
+        # 🆕 加上 type 過濾：characters collection 現在同時存放角色背景與主角背景
         return self.vector_store.search(
             collection_name="characters",
             query=query,
             limit=limit,
-            filters={"conversation_id": conversation_id}
+            filters={"conversation_id": conversation_id, "type": "character_background"}
+        )
+
+    def search_character_personality(
+        self,
+        conversation_id: str
+    ) -> List[Dict]:
+        """
+        搜尋最能代表角色性格的背景切片
+
+        🆕 與其他檢索不同：不使用當前對話當索引，而是用 config 中固定的
+        「性格」語意關鍵詞（personalityQuery）——性格錨定不隨劇情漂移，
+        每輪都穩定命中【性格特徵】【語言風格】等切片
+
+        參數：
+            conversation_id: 聊天室 ID
+
+        返回：
+            最相關性格描述切片
+        """
+        limit = config.get("rag.search.personalityLimit")
+        if limit is None:
+            raise ValueError("rag.search.personalityLimit must be set in config")
+
+        query = config.get("rag.search.personalityQuery")
+        if not query:
+            raise ValueError("rag.search.personalityQuery must be set in config")
+
+        return self.vector_store.search(
+            collection_name="characters",
+            query=query,
+            limit=limit,
+            filters={"conversation_id": conversation_id, "type": "character_background"}
+        )
+
+    def search_protagonist_background(
+        self,
+        conversation_id: str,
+        query: str
+    ) -> List[Dict]:
+        """
+        搜尋最相關主角（主人公）背景資訊
+
+        參數：
+            conversation_id: 聊天室 ID
+            query: 搜尋文本
+
+        返回：
+            最相關主角背景搜尋結果
+        """
+        limit = config.get("rag.search.protagonistLimit")
+        if limit is None:
+            raise ValueError("rag.search.protagonistLimit must be set in config")
+
+        return self.vector_store.search(
+            collection_name="characters",
+            query=query,
+            limit=limit,
+            filters={"conversation_id": conversation_id, "type": "protagonist_background"}
         )
 
     def search_fewshots(
@@ -243,7 +359,7 @@ class RAGRepository:
         self,
         conversation_id: str,
         summary: str
-    ) -> bool:
+    ) -> str:
         """
         添加對話摘要到向量資料庫
 
@@ -252,22 +368,45 @@ class RAGRepository:
             summary: 摘要文本
 
         返回：
-            是否成功
+            summary_id（Qdrant point id，UUID 字串）——
+            🆕 回傳給 chat-service 記錄到訊息的 summaryId 欄位，供日後精準刪除
+
+        拋出：
+            Exception 如果存入失敗（upsert_documents 會拋出具體錯誤）
         """
+        # 生成摘要 ID（同時作為 Qdrant point id）
+        summary_id = str(uuid.uuid4())
+
         # 為摘要建立文檔
         doc = {
-            "id": str(uuid.uuid4()),
+            "id": summary_id,
             "text": summary,
             "conversation_id": conversation_id,
             "type": "summary",
             "timestamp": __import__('time').time()
         }
 
-        return self.vector_store.upsert_documents(
+        # 🆕 upsert_documents 失敗會直接拋錯，成功才會走到 return
+        self.vector_store.upsert_documents(
             "summaries",
             [doc],
             metadata_fields=["conversation_id", "type", "timestamp"]
         )
+
+        print(f"✓ [rag_repository] 摘要已存入: summary_id={summary_id}")
+        return summary_id
+
+    def delete_summaries(self, summary_ids: List[str]):
+        """
+        按 summary_id 精準刪除摘要（用於訊息回溯刪除時的記憶清理）
+
+        參數：
+            summary_ids: 摘要 ID 列表（= Qdrant point id）
+
+        拋出：
+            Exception 如果刪除失敗（Qdrant 不可用等）——【被動報錯】不捕獲
+        """
+        self.vector_store.delete_points("summaries", summary_ids)
 
     # ===== 資料驗證 =====
 

@@ -32,6 +32,17 @@ class AddSummaryRequest(BaseModel):
     summary: str
 
 
+class DeleteSummariesRequest(BaseModel):
+    """按 summary_id 刪除摘要的請求（訊息回溯刪除時的記憶清理）"""
+    conversation_id: str
+    summary_ids: List[str]
+
+
+class UpdateProtagonistRequest(BaseModel):
+    """更新主角（主人公）背景的請求"""
+    background: Optional[str] = None
+
+
 
 
 # ===== Endpoints =====
@@ -151,6 +162,39 @@ async def get_initialization_status(conversation_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.put("/conversations/{conversation_id}/protagonist")
+async def update_protagonist(conversation_id: str, request: UpdateProtagonistRequest):
+    """
+    更新聊天室的主角（主人公）背景
+
+    使用者編輯並儲存主角人設時，chat-service 呼叫此端點
+    先刪除舊切片再存入新切片（background 為空 = 清除）
+    """
+    try:
+        print(f"📥 [rag_controller] 更新主角背景: conversationId={conversation_id}, {len(request.background or '')} 字")
+        # 🆕 【被動報錯】如果 rag_service 拋異常，直接向上傳播
+        result = rag_service.update_protagonist_background(
+            conversation_id=conversation_id,
+            background=request.background or ""
+        )
+
+        print(f"✅ [rag_controller] 主角背景更新成功")
+        return result
+    except Exception as e:
+        error_msg = str(e)
+        print(f"❌ [rag_controller] 異常: {type(e).__name__}: {error_msg}")
+        import traceback
+        traceback.print_exc()
+
+        # 🆕 區分 RAG 相關錯誤和其他錯誤
+        if "Qdrant" in error_msg or "connection" in error_msg.lower() or "refused" in error_msg.lower():
+            # RAG 不可用 → 503 Service Unavailable
+            raise HTTPException(status_code=503, detail=error_msg)
+        else:
+            # 其他錯誤 → 500 Internal Server Error
+            raise HTTPException(status_code=500, detail=error_msg)
+
+
 @router.get("/status")
 async def get_status():
     """
@@ -182,7 +226,39 @@ async def add_summary(request: AddSummaryRequest):
             summary=request.summary
         )
 
-        print(f"✅ [rag_controller] 摘要存儲成功")
+        print(f"✅ [rag_controller] 摘要存儲成功: summary_id={result.get('summary_id')}")
+        return result
+    except Exception as e:
+        error_msg = str(e)
+        print(f"❌ [rag_controller] 異常: {type(e).__name__}: {error_msg}")
+        import traceback
+        traceback.print_exc()
+
+        # 🆕 區分 RAG 相關錯誤和其他錯誤
+        if "Qdrant" in error_msg or "connection" in error_msg.lower():
+            # RAG 不可用 → 503 Service Unavailable
+            raise HTTPException(status_code=503, detail=error_msg)
+        else:
+            # 其他錯誤 → 500 Internal Server Error
+            raise HTTPException(status_code=500, detail=error_msg)
+
+
+@router.delete("/summaries")
+async def delete_summaries(request: DeleteSummariesRequest):
+    """
+    按 summary_id 精準刪除摘要
+
+    chat-service 在訊息回溯刪除時呼叫此端點，清除涵蓋被刪訊息的記憶
+    """
+    try:
+        print(f"📥 [rag_controller] 刪除摘要: conversationId={request.conversation_id}, ids={request.summary_ids}")
+        # 🆕 【被動報錯】如果 rag_service 拋異常，直接向上傳播
+        result = rag_service.delete_summaries(
+            conversation_id=request.conversation_id,
+            summary_ids=request.summary_ids
+        )
+
+        print(f"✅ [rag_controller] 摘要刪除成功: 共 {result['deleted_count']} 份")
         return result
     except Exception as e:
         error_msg = str(e)

@@ -47,7 +47,8 @@ class ChatService:
         self,
         conversation_id: str,
         character_info: dict,
-        conversation_history: list
+        conversation_history: list,
+        protagonist_name: str = None
     ) -> dict:
         """
         生成 AI 回應
@@ -56,6 +57,7 @@ class ChatService:
             conversation_id: str，聊天室 ID
             character_info: dict，角色資訊 {name, gender, tags}
             conversation_history: list，對話歷史 [{role, text}, ...]
+            protagonist_name: str，主角（主人公）名稱（可選，未設定則不注入主角段落）
 
         返回：
             dict，{status, message}
@@ -88,10 +90,10 @@ class ChatService:
                 )
                 rag_duration = time.time() - rag_start
                 print(f"✅ [chat_service] RAG 檢索完成 (耗時 {rag_duration:.2f}s)")
-                if rag_context.get("character_background"):
-                    print(f"📖 [chat_service] 檢索到最相關背景資訊:\n{rag_context['character_background']}\n")
-                else:
-                    print(f"⚠️  [chat_service] 未檢索到背景資訊")
+                backgrounds = rag_context.get("character_background", [])
+                print(f"📖 [chat_service] 檢索到 {len(backgrounds)} 條最相關背景資訊")
+                for idx, bg in enumerate(backgrounds, 1):
+                    print(f"  背景 {idx}: {bg}")
 
                 fewshots = rag_context.get("fewshots", [])
                 print(f"💬 [chat_service] 檢索到 {len(fewshots)} 個最相關對話範例")
@@ -103,13 +105,26 @@ class ChatService:
                 for idx, summary in enumerate(summaries, 1):
                     print(f"  最相關摘要 {idx}:\n{summary}\n")
 
+                # 🆕 主角背景檢索結果（列表）
+                protagonist_bgs = rag_context.get("protagonist_background", [])
+                print(f"👤 [chat_service] 檢索到 {len(protagonist_bgs)} 條最相關主角背景")
+                for idx, pb in enumerate(protagonist_bgs, 1):
+                    print(f"  主角背景 {idx}: {pb}")
+
+                # 🆕 角色性格描述（固定索引檢索）
+                personality = rag_context.get("character_personality", [])
+                print(f"🎭 [chat_service] 檢索到 {len(personality)} 條角色性格描述（固定索引）")
+                for idx, p in enumerate(personality, 1):
+                    print(f"  性格描述 {idx}: {p}")
+
             # 2. 組裝 system prompt
             print(f"📝 [chat_service] 組裝 system prompt...")
             system_prompt = prompt_builder.build_system_prompt(
                 behavior_specs=self.behavior_specs,
                 character_info=character_info,
                 conversation_history=conversation_history,
-                rag_context=rag_context
+                rag_context=rag_context,
+                protagonist_name=protagonist_name
             )
 
             # 3. 準備訊息清單（system prompt + 對話歷史）
@@ -125,6 +140,18 @@ class ChatService:
                 })
 
             print(f"📊 [chat_service] 訊息清單: {len(messages)} 筆 (1 個 system + {len(conversation_history)} 個對話)")
+
+            # 🐛 【DEBUG】列印實際送給 Ollama 的完整 messages 清單
+            # 用來驗證：對話歷史是否同時存在於 system prompt（Current Conversation Context 段落）
+            # 和 messages 清單中（= 同一批歷史被送了兩次）
+            print(f"\n🐛 [DEBUG] ===== 實際送給 Ollama 的 messages 清單（共 {len(messages)} 筆）=====")
+            for idx, m in enumerate(messages):
+                content = m["content"]
+                if m["role"] == "system":
+                    print(f"🐛 [DEBUG] [{idx}] role=system, 長度={len(content)} 字（內容即上方印出的 system prompt）")
+                else:
+                    print(f"🐛 [DEBUG] [{idx}] role={m['role']} | {content}")
+            print(f"🐛 [DEBUG] ===== messages 清單結束 =====\n")
 
             # 4. 呼叫 Ollama 生成回應
             ollama_start = time.time()

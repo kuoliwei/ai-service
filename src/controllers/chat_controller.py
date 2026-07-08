@@ -30,6 +30,8 @@ class GenerateResponseRequest(BaseModel):
     conversation_id: str
     character_info: CharacterInfo
     conversation_history: List[MessageHistory]
+    # 🆕 主角（主人公）名稱：使用者扮演的角色名，可選（未設定則 prompt 不注入主角段落）
+    protagonist_name: Optional[str] = None
 
 
 class GenerateSummaryRequest(BaseModel):
@@ -75,7 +77,8 @@ async def generate_response(request: GenerateResponseRequest):
         result = chat_service.generate_response(
             conversation_id=request.conversation_id,
             character_info=character_info_dict,
-            conversation_history=conversation_history_list
+            conversation_history=conversation_history_list,
+            protagonist_name=request.protagonist_name
         )
 
         # 檢查結果

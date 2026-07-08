@@ -19,9 +19,12 @@
     "chunkSize": 200,
     "chunkOverlap": 100,
     "search": {
-      "backgroundLimit": 1,
-      "fewshotsLimit": 1,
-      "summariesLimit": 1
+      "backgroundLimit": 2,
+      "fewshotsLimit": 2,
+      "summariesLimit": 2,
+      "protagonistLimit": 2,
+      "personalityLimit": 2,
+      "personalityQuery": "性格特徵 語言風格 說話口吻 行為風格"
     }
   },
   "gateway": {

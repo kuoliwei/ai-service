@@ -263,11 +263,13 @@ class RAGService:
         # 🆕 【被動報錯】不捕獲異常，讓 Qdrant 不可用時直接拋出
         # 這樣 chat_service 才能知道 RAG 失敗，整個流程停止
 
+        # 🆕 所有檢索結果一律回傳列表（數量完全由 config 的 limit 決定，不在代碼中截斷）
+
         # 1. 搜尋最相關背景資訊
         background = self.repository.search_character_background(
             conversation_id, user_message
         )
-        background_text = background[0]["text"] if background else None
+        background_text = [b["text"] for b in background] if background else []
 
         # 2. 搜尋最相關對話範例
         fewshots = self.repository.search_fewshots(
@@ -281,11 +283,55 @@ class RAGService:
         )
         summaries_text = [s["text"] for s in summaries] if summaries else []
 
+        # 4. 🆕 搜尋最相關主角（主人公）背景資訊（未設定時自然為空）
+        protagonist = self.repository.search_protagonist_background(
+            conversation_id, user_message
+        )
+        protagonist_text = [p["text"] for p in protagonist] if protagonist else []
+
+        # 5. 🆕 搜尋角色性格描述（固定「性格」語意索引，不用當前對話——性格錨定不隨劇情漂移）
+        personality = self.repository.search_character_personality(conversation_id)
+        personality_text = [p["text"] for p in personality] if personality else []
+
         return {
             "status": "success",
             "character_background": background_text,
             "fewshots": fewshots_text,
-            "summaries": summaries_text
+            "summaries": summaries_text,
+            "protagonist_background": protagonist_text,
+            "character_personality": personality_text
+        }
+
+    # ===== 主角（主人公）人設管理 =====
+
+    def update_protagonist_background(
+        self,
+        conversation_id: str,
+        background: str
+    ) -> Dict:
+        """
+        更新聊天室的主角背景（先刪舊切片再存新切片）
+
+        使用者在聊天室編輯並儲存主角人設時，由 chat-service 呼叫
+
+        參數：
+            conversation_id: 聊天室 ID
+            background: 主角背景文本（空字串 = 清除）
+
+        返回：
+            更新結果
+
+        拋出：
+            Exception 如果 Qdrant 操作失敗——【被動報錯】不捕獲
+        """
+        print(f"👤 [rag_service] 更新主角背景: conversationId={conversation_id}, {len(background or '')} 字")
+
+        self.repository.replace_protagonist_background(conversation_id, background or "")
+
+        return {
+            "status": "success",
+            "conversation_id": conversation_id,
+            "message": "Protagonist background updated"
         }
 
     # ===== 摘要管理 =====
@@ -312,16 +358,50 @@ class RAGService:
         print(f"   摘要內容: {summary}\n")
 
         # 🆕 【被動報錯】不捕獲異常，讓 repository 的異常直接傳播
-        success = self.repository.add_summary(
+        # repository 回傳 summary_id（Qdrant point id），一併回報給 chat-service
+        summary_id = self.repository.add_summary(
             conversation_id, summary
         )
-        if not success:
-            raise Exception("Failed to add summary to vector database")
 
         return {
             "status": "success",
             "conversation_id": conversation_id,
+            "summary_id": summary_id,
             "message": "Summary added to vector database"
+        }
+
+    def delete_summaries(
+        self,
+        conversation_id: str,
+        summary_ids: List[str]
+    ) -> Dict:
+        """
+        按 summary_id 精準刪除摘要（訊息回溯刪除時，清除涵蓋被刪訊息的記憶）
+
+        參數：
+            conversation_id: 聊天室 ID（僅用於日誌）
+            summary_ids: 摘要 ID 列表（= Qdrant point id）
+
+        返回：
+            刪除結果
+
+        拋出：
+            Exception 如果刪除失敗——【被動報錯】不捕獲
+        """
+        print(f"🗑️ [rag_service] 刪除摘要: conversationId={conversation_id}, 共 {len(summary_ids)} 份")
+        print(f"🐛 [DEBUG] ----- 將從 Qdrant summaries collection 刪除的 points -----")
+        for idx, sid in enumerate(summary_ids, 1):
+            print(f"🐛 [DEBUG]   {idx}. point_id={sid}")
+
+        self.repository.delete_summaries(summary_ids)
+
+        print(f"🐛 [DEBUG] ✅ Qdrant 刪除完成: {len(summary_ids)} 個 points 已移除")
+
+        return {
+            "status": "success",
+            "conversation_id": conversation_id,
+            "deleted_count": len(summary_ids),
+            "message": "Summaries deleted from vector database"
         }
 
     # ===== 系統管理 =====
