@@ -5,10 +5,11 @@
   },
   "ollama": {
     "url": "http://localhost:11434",
-    "model": "llama3.1",
+    "model": "gemma-26b:latest",
     "temperature": 0.7,
     "timeout": 300,
-    "embedModel": "nomic-embed-text"
+    "embedModel": "nomic-embed-text",
+    "keepAlive": "30m"
   },
   "qdrant": {
     "url": "http://localhost:6333",
@@ -16,8 +17,8 @@
   },
   "rag": {
     "enabled": true,
-    "chunkSize": 200,
-    "chunkOverlap": 100,
+    "chunkSize": 250,
+    "chunkOverlap": 50,
     "search": {
       "backgroundLimit": 2,
       "fewshotsLimit": 2,

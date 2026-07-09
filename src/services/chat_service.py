@@ -158,13 +158,22 @@ class ChatService:
             print(f"🧠 [chat_service] 呼叫 Ollama 引擎... (開始時間: {ollama_start})")
             import ollama
 
-            ollama_model = config.get("ollama.model", "llama2")
-            ollama_temperature = config.get("ollama.temperature", 0.7)
+            # 🆕 【無預設值】Ollama 參數必須由 config 提供，缺鍵直接拋錯
+            ollama_model = config.get("ollama.model")
+            if ollama_model is None:
+                raise ValueError("ollama.model must be set in config")
+            ollama_temperature = config.get("ollama.temperature")
+            if ollama_temperature is None:
+                raise ValueError("ollama.temperature must be set in config")
+            ollama_keep_alive = config.get("ollama.keepAlive")  # 模型常駐設定（-1 = 永不卸載）
+            if ollama_keep_alive is None:
+                raise ValueError("ollama.keepAlive must be set in config")
 
             response = ollama.chat(
                 model=ollama_model,
                 messages=messages,
-                options={"temperature": ollama_temperature}
+                options={"temperature": ollama_temperature},
+                keep_alive=ollama_keep_alive
             )
 
             ai_response = response['message']['content']
@@ -207,13 +216,22 @@ class ChatService:
             # 呼叫 Ollama 生成摘要
             import ollama
 
-            ollama_model = config.get("ollama.model", "llama2")
-            ollama_temperature = config.get("ollama.temperature", 0.7)
+            # 🆕 【無預設值】Ollama 參數必須由 config 提供，缺鍵直接拋錯
+            ollama_model = config.get("ollama.model")
+            if ollama_model is None:
+                raise ValueError("ollama.model must be set in config")
+            ollama_temperature = config.get("ollama.temperature")
+            if ollama_temperature is None:
+                raise ValueError("ollama.temperature must be set in config")
+            ollama_keep_alive = config.get("ollama.keepAlive")  # 模型常駐設定
+            if ollama_keep_alive is None:
+                raise ValueError("ollama.keepAlive must be set in config")
 
             response = ollama.chat(
                 model=ollama_model,
                 messages=[{"role": "user", "content": prompt}],
-                options={"temperature": ollama_temperature}
+                options={"temperature": ollama_temperature},
+                keep_alive=ollama_keep_alive
             )
 
             summary = response['message']['content']

@@ -14,8 +14,13 @@ class RAGRepository:
 
     def __init__(self):
         self.vector_store = vector_store
-        self.max_chunk_size = config.get("rag.chunkSize", 500)
-        self.chunk_overlap = config.get("rag.chunkOverlap", 100)
+        # 🆕 【無預設值】切片參數必須由 config 提供，缺鍵直接拋錯
+        self.max_chunk_size = config.get("rag.chunkSize")
+        if self.max_chunk_size is None:
+            raise ValueError("rag.chunkSize must be set in config")
+        self.chunk_overlap = config.get("rag.chunkOverlap")
+        if self.chunk_overlap is None:
+            raise ValueError("rag.chunkOverlap must be set in config")
 
     def _chunk_text(self, text: str) -> List[str]:
         """

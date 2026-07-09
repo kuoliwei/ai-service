@@ -37,6 +37,32 @@ async def startup_event():
     except Exception as e:
         print(f"❌ [app.py] RAG 集合初始化失敗: {e}")
 
+    # 🆕 背景預載 Ollama 模型（不阻塞啟動，載入期間其他端點照常可用）
+    # keep_alive=-1 讓模型常駐記憶體，不會因閒置 5 分鐘被 Ollama 自動卸載
+    import threading
+
+    def _preload_model():
+        import time
+        from src.config.config_loader import config as cfg
+        model = cfg.get("ollama.model")
+        keep_alive = cfg.get("ollama.keepAlive")
+        try:
+            # 【無預設值】必須由 config 提供
+            if model is None:
+                raise ValueError("ollama.model must be set in config")
+            if keep_alive is None:
+                raise ValueError("ollama.keepAlive must be set in config")
+            print(f"🔥 [app.py] 開始預載模型: {model}（keep_alive={keep_alive}）...")
+            start = time.time()
+            import ollama
+            # 空 prompt 的 generate 請求 = Ollama 官方的「純載入」慣例，不會實際生成
+            ollama.generate(model=model, prompt="", keep_alive=keep_alive)
+            print(f"✅ [app.py] 模型預載完成: {model}（耗時 {time.time() - start:.1f}s，常駐記憶體）")
+        except Exception as e:
+            print(f"⚠️  [app.py] 模型預載失敗（首次聊天時將重新載入）: {e}")
+
+    threading.Thread(target=_preload_model, daemon=True).start()
+
 # CORS 配置
 app.add_middleware(
     CORSMiddleware,
