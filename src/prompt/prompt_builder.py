@@ -122,7 +122,7 @@ class PromptBuilder:
         protagonist_str = ""
         protagonist_background = rag_context.get("protagonist_background") if rag_context else None
         if protagonist_name or protagonist_background:
-            protagonist_str = "\n\n## The Protagonist (played by the user)"
+            protagonist_str = "\n\n## The Protagonist (played by the user), the primary recipient of your responses"
             if protagonist_name:
                 protagonist_str += f"\n- **Name**: {protagonist_name}"
             if protagonist_background:
@@ -134,25 +134,37 @@ class PromptBuilder:
         # 10. History summaries (placed at the end, standalone section)
         rag_context_str = ""
         if rag_context and rag_context.get("summaries"):
-            rag_context_str = "\n\n## History Summaries Most Relevant to the Current Conversation"
+            rag_context_str = "\n\n## History Summaries Most Relevant to the Current Conversation — these are events that have already happened, for your reference"
             for idx, summary in enumerate(rag_context["summaries"], 1):
                 rag_context_str += f"\n**Summary {idx}:**\n{summary}"
 
-        # 11. Assemble the final system prompt
-        # (conversation history is sent natively as chat messages — not assembled here)
+        # 11. 🆕 引導語（system prompt 結尾，銜接「最近一次歷史摘要 + 對話歷史」）
+        #     中文對照：「以下是最近一次歷史摘要與當前對話紀錄，請判斷並考量當前地點、
+        #                情境、角色對使用者的好感度來做出恰當回覆。」
+        conversation_lead_in = (
+            "\n\nThe following is the most recent history summary and the current conversation. "
+            "Assess and account for the current location, situation, and the character's "
+            "affinity toward the user to produce an appropriate response."
+        )
+
+        # 12. 🆕 最近一次歷史摘要（時間最新的單筆，非相關度檢索——保證 AI 記得上一段劇情、維持連續性）
+        latest_summary_str = ""
+        if rag_context and rag_context.get("latest_summary"):
+            latest_summary_str = f"\n\n## Most Recent History Summary\n{rag_context['latest_summary']}"
+
+        # 13. Assemble the final system prompt
+        # (conversation history is sent natively as chat messages — not assembled here;
+        #  the lead-in above bridges into the latest summary + conversation)
         prompt = f"""# System Roleplay Instructions
 
 ## Mission
 {mission}
 
-{principles_str}{roleplay_rules_str}{writing_style_str}{response_format_str}{examples_str}{character_str}{protagonist_str}{rag_context_str}
+{principles_str}{roleplay_rules_str}{writing_style_str}{response_format_str}{examples_str}{character_str}{protagonist_str}{rag_context_str}{conversation_lead_in}{latest_summary_str}
 """
 
         final_prompt = prompt.strip()
-        print(f"\n🔧 [prompt_builder] Final System Prompt:\n{'='*80}")
-        print(final_prompt)
-        print(f"{'='*80}\n")
-
+        # 註：system prompt 全文由 chat_service 的「語言模型實際收到的完整輸入」debug 統一印出，此處不重複
         return final_prompt
 
 

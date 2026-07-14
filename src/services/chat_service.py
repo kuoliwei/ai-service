@@ -141,17 +141,13 @@ class ChatService:
 
             print(f"📊 [chat_service] 訊息清單: {len(messages)} 筆 (1 個 system + {len(conversation_history)} 個對話)")
 
-            # 🐛 【DEBUG】列印實際送給 Ollama 的完整 messages 清單
-            # 用來驗證：對話歷史是否同時存在於 system prompt（Current Conversation Context 段落）
-            # 和 messages 清單中（= 同一批歷史被送了兩次）
-            print(f"\n🐛 [DEBUG] ===== 實際送給 Ollama 的 messages 清單（共 {len(messages)} 筆）=====")
-            for idx, m in enumerate(messages):
-                content = m["content"]
-                if m["role"] == "system":
-                    print(f"🐛 [DEBUG] [{idx}] role=system, 長度={len(content)} 字（內容即上方印出的 system prompt）")
-                else:
-                    print(f"🐛 [DEBUG] [{idx}] role={m['role']} | {content}")
-            print(f"🐛 [DEBUG] ===== messages 清單結束 =====\n")
+            # 列印「語言模型實際收到的完整輸入」——依 Ollama messages 順序、每筆全文
+            # 這是模型唯一的輸入來源：第一筆為 system prompt 全文，其後為未摘要對話（user/assistant 交錯）
+            print(f"\n========== 語言模型實際收到的完整輸入 ==========\n")
+            for m in messages:
+                print(f"[{m['role']}]")
+                print(f"{m['content']}\n")
+            print(f"========== 輸入結束 ==========\n")
 
             # 4. 呼叫 Ollama 生成回應
             ollama_start = time.time()

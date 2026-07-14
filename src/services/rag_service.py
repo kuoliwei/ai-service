@@ -293,13 +293,17 @@ class RAGService:
         personality = self.repository.search_character_personality(conversation_id)
         personality_text = [p["text"] for p in personality] if personality else []
 
+        # 6. 🆕 取「時間最新」的一筆摘要（非相關度檢索，保證 AI 記得上一段劇情、維持連續性）
+        latest_summary = self.repository.get_latest_summary(conversation_id)
+
         return {
             "status": "success",
             "character_background": background_text,
             "fewshots": fewshots_text,
             "summaries": summaries_text,
             "protagonist_background": protagonist_text,
-            "character_personality": personality_text
+            "character_personality": personality_text,
+            "latest_summary": latest_summary
         }
 
     # ===== 主角（主人公）人設管理 =====

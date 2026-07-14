@@ -401,6 +401,43 @@ class RAGRepository:
         print(f"✓ [rag_repository] 摘要已存入: summary_id={summary_id}")
         return summary_id
 
+    def get_latest_summary(self, conversation_id: str) -> Optional[str]:
+        """
+        取得該聊天室「時間最新」的一筆摘要（依 timestamp 最大者）
+
+        🆕 與 search_summaries（按當前對話相關度檢索）不同：
+        這裡不做語義檢索，而是撈出全部摘要、挑時間最新的一筆——
+        用來保證 AI 永遠看得到「上一段劇情剛發生什麼」，維持連續性。
+
+        參數：
+            conversation_id: 聊天室 ID
+
+        返回：
+            最新摘要的文本；若無任何摘要則回 None
+
+        拋出：
+            Exception 如果 Qdrant 不可用（scroll 會拋錯）——【被動報錯】不捕獲
+        """
+        filter_condition = Filter(
+            must=[
+                FieldCondition(key="conversation_id", match=MatchValue(value=conversation_id))
+            ]
+        )
+        # 摘要每室數量不多，一次 scroll 全撈；with_payload 才拿得到 text/timestamp
+        points, _ = self.vector_store.client.scroll(
+            collection_name="summaries",
+            scroll_filter=filter_condition,
+            limit=1000,
+            with_payload=True,
+            with_vectors=False
+        )
+        if not points:
+            return None
+
+        # 挑 timestamp 最大（最新）的一筆
+        latest = max(points, key=lambda p: p.payload.get("timestamp", 0))
+        return latest.payload.get("text")
+
     def delete_summaries(self, summary_ids: List[str]):
         """
         按 summary_id 精準刪除摘要（用於訊息回溯刪除時的記憶清理）
